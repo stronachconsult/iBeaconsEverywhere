@@ -10,12 +10,35 @@ namespace iBeaconsEverywhere.iOS
 {
 	public partial class MasterViewController : UITableViewController
 	{
-		DataSource dataSource;
+		private DataSource _dataSource;
+        private CLLocationManager _locationManager;
+	    private List<CLBeaconRegion> _beaconRegions; 
+
+	    private static readonly List<string> _uuidList = new List<string>()
+	    {
+	        {"6dc7e358-6d0a-4da8-8f99-0a1efe58a81c"}, //arubas
+	        {"b9407f30-f5f8-466e-aff9-25556b57fe6d"} //estimotes
+	    };
 
 		public MasterViewController () : base ("MasterViewController", null)
 		{
-			Title = NSBundle.MainBundle.LocalizedString ("Master", "iBeacons Everywhere");
+            //Title = NSBundle.MainBundle.LocalizedString("Master", "iBeacons Everywhere");
 
+            Near = UIImage.FromBundle("Images/square_near");
+            Far = UIImage.FromBundle("Images/square_far");
+            Immediate = UIImage.FromBundle("Images/square_immediate");
+            Unknown = UIImage.FromBundle("Images/square_unknown");
+
+            _locationManager = new CLLocationManager();
+            _locationManager.RequestAlwaysAuthorization();
+
+            _locationManager.DidRangeBeacons += (object sender, CLRegionBeaconsRangedEventArgs e) =>
+            {
+                _dataSource.Beacons = e.Beacons;
+                TableView.ReloadData();
+            };
+
+            _beaconRegions = new List<CLBeaconRegion>();
 		}
 
 		public DetailViewController DetailViewController {
@@ -23,76 +46,61 @@ namespace iBeaconsEverywhere.iOS
 			set;
 		}
 
-
-		CLLocationManager locationmanager;
-		NSUuid beaconUUID;
-		CLBeaconRegion beaconRegion;
-		const ushort beaconMajor = 2755;
-		const ushort beaconMinor = 5;
-		const string beaconId ="com.refractored";
-		const string uuid = "B9407F30-F5F8-466E-AFF9-25556B57FE6D";
 		public UIImage Near, Far, Immediate, Unknown;
-
-		CLBeaconRegion beaconRegionNotifications;
 
 		public override void ViewDidLoad ()
 		{
 			base.ViewDidLoad ();
 
-			Near = UIImage.FromBundle ("Images/square_near");
-			Far = UIImage.FromBundle ("Images/square_far");
-			Immediate = UIImage.FromBundle ("Images/square_immediate");
-			Unknown = UIImage.FromBundle ("Images/square_unknown");
+            Title = NSBundle.MainBundle.LocalizedString("Master", "iBeacons Everywhere");
 
-			beaconUUID = new NSUuid (uuid);
-			beaconRegion = new CLBeaconRegion (beaconUUID, beaconMajor, beaconMinor, beaconId);
+            //Near = UIImage.FromBundle ("Images/square_near");
+            //Far = UIImage.FromBundle ("Images/square_far");
+            //Immediate = UIImage.FromBundle ("Images/square_immediate");
+            //Unknown = UIImage.FromBundle ("Images/square_unknown");
+
+            //_locationManager = new CLLocationManager();
+            //_locationManager.RequestAlwaysAuthorization();
+
+            //_beaconRegions = new List<CLBeaconRegion>();
+		    foreach (var uid in _uuidList)
+		    {
+		        var beaconUuid = new NSUuid(uid);
+		        var beaconRegion = new CLBeaconRegion(beaconUuid, uid);
+		        beaconRegion.NotifyEntryStateOnDisplay = true;
+		        beaconRegion.NotifyOnEntry = true;
+		        beaconRegion.NotifyOnExit = true;
+
+                _beaconRegions.Add(beaconRegion);
+		    }
 
 
-			beaconRegion.NotifyEntryStateOnDisplay = true;
-			beaconRegion.NotifyOnEntry = true;
-			beaconRegion.NotifyOnExit = true;
+			_locationManager.RegionEntered += (object sender, CLRegionEventArgs e) => {
 
-			locationmanager = new CLLocationManager ();
-			locationmanager.RequestAlwaysAuthorization ();
-
-
-			locationmanager.RegionEntered += (object sender, CLRegionEventArgs e) => {
-
-					var notification = new UILocalNotification () { AlertBody = "The Xamarin beacon is close by!" };
+					var notification = new UILocalNotification ()
+					{
+					    AlertBody = string.Format("you have entered the region {0}", e.Region.Identifier)
+					};
 					UIApplication.SharedApplication.CancelAllLocalNotifications();
 					UIApplication.SharedApplication.PresentLocationNotificationNow (notification);
 			};
 
 
-			locationmanager.DidRangeBeacons += (object sender, CLRegionBeaconsRangedEventArgs e) => {
+            //_locationManager.DidRangeBeacons += (object sender, CLRegionBeaconsRangedEventArgs e) => {
+            //    _dataSource.Beacons = e.Beacons;
+            //    TableView.ReloadData();
+            //};
 
+		    foreach (var clBeaconRegion in _beaconRegions)
+		    {
+                _locationManager.StartMonitoring(clBeaconRegion);
+                _locationManager.StartRangingBeacons(clBeaconRegion);
+		    }
+			
 
-				if (e.Beacons.Length > 0) {
-
-					CLBeacon beacon = e.Beacons [0];
-					//this.Title = beacon.Proximity.ToString() + " " +beacon.Major + "." + beacon.Minor;
-				}
-					
-				dataSource.Beacons = e.Beacons;
-				TableView.ReloadData();
-			};
-
-
-
-
-
-
-
-			locationmanager.StartMonitoring (beaconRegion);
-			locationmanager.StartRangingBeacons (beaconRegion);
-
-
-
-			TableView.Source = dataSource = new DataSource (this);
+			TableView.Source = _dataSource = new DataSource (this);
 
 		}
-
-
 	
 		class DataSource : UITableViewSource
 		{
